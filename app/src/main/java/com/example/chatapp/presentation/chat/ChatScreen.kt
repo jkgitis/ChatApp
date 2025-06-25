@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -26,8 +25,7 @@ import com.example.chatapp.data.model.Message
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -36,9 +34,10 @@ fun ChatScreen(
     viewModel: ChatViewModel = viewModel()
 ) {
     val messages by viewModel.messages.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
     val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
     var input by remember { mutableStateOf("") }
+
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val scrollState = rememberLazyListState()
@@ -51,81 +50,64 @@ fun ChatScreen(
         }
     }
 
-    // Handle UI states
-    when (uiState) {
-        is ChatUiState.Error -> {
-            val error = (uiState as ChatUiState.Error).message
-            LaunchedEffect(error) {
-                scope.launch {
-                    // Show snackbar with error message
-                }
-            }
-        }
-        else -> {}
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(text = "Chat") },
                 actions = {
-                    IconButton(onClick = { /* Handle sign out */ }) {
+                    IconButton(
+                        onClick = {
+                            FirebaseAuth.getInstance().signOut()
+                            navController.navigate("login") {
+                                popUpTo("chat") { inclusive = true }
+                            }
+                        }
+                    ) {
                         Icon(Icons.Default.ExitToApp, contentDescription = "Sign out")
                     }
                 }
             )
         },
         bottomBar = {
-            Column {
-                Divider()
-                Row(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    placeholder = { Text("Type a message...") },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        placeholder = { Text("Type a message...") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 56.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(
-                            onSend = {
-                                if (input.isNotBlank()) {
-                                    viewModel.sendMessage(input)
-                                    input = ""
-                                    focusManager.clearFocus()
-                                }
-                            }
-                        ),
-                        maxLines = 3
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
+                        .weight(1f)
+                        .heightIn(min = 56.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
                             if (input.isNotBlank()) {
-                                viewModel.sendMessage(input)
+                                viewModel.sendMessage(input.trim())
                                 input = ""
                                 focusManager.clearFocus()
                                 keyboardController?.hide()
                             }
-                        },
-                        modifier = Modifier.height(56.dp),
-                        enabled = input.isNotBlank() && uiState !is ChatUiState.Sending
-                    ) {
-                        if (uiState is ChatUiState.Sending) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("Send")
                         }
-                    }
+                    ),
+                    maxLines = 3
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        if (input.isNotBlank()) {
+                            viewModel.sendMessage(input.trim())
+                            input = ""
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }
+                    },
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Text("Send")
                 }
             }
         }
@@ -136,7 +118,7 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(messages) { message ->
@@ -145,12 +127,6 @@ fun ChatScreen(
                         isCurrentUser = message.senderId == currentUserId
                     )
                 }
-            }
-
-            if (uiState is ChatUiState.Loading && messages.isEmpty()) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
             }
         }
     }
@@ -166,7 +142,7 @@ fun MessageItem(message: Message, isCurrentUser: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalArrangement = if (isCurrentUser) Arrangement.End else Arrangement.Start
     ) {
         Column(

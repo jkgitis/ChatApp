@@ -4,71 +4,85 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.chatapp.data.model.Message
 import com.example.chatapp.data.repository.ChatRepository
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
-class ChatViewModel(
-    private val repository: ChatRepository = ChatRepository()
-) : ViewModel() {
+class ChatViewModel : ViewModel() {
+
+    private val repository = ChatRepository()
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
-    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
-
-    private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Idle)
-    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+    val messages: StateFlow<List<Message>> = _messages
 
     private var listenerRegistration: ListenerRegistration? = null
 
     init {
-        listenToMessages()
+        listenForMessages()
     }
 
-    private fun listenToMessages() {
-        _uiState.value = ChatUiState.Loading
+    private fun listenForMessages() {
         listenerRegistration = repository.getMessagesQuery()
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    _uiState.value = ChatUiState.Error(error.message ?: "Unknown error")
-                    return@addSnapshotListener
-                }
-
-                snapshot?.let {
-                    val msgs = it.documents.mapNotNull { doc ->
-                        doc.toObject(Message::class.java)
-                    }.sortedBy { it.timestamp }
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val msgs = snapshot.documents.mapNotNull { it.toObject(Message::class.java) }
                     _messages.value = msgs
-                    _uiState.value = ChatUiState.Success
                 }
             }
     }
 
-    fun sendMessage(text: String) {
-        if (text.isBlank()) return
+    // 🔥 Hardcoded AI replies map
+    private val aiResponses = mapOf(
+        "hi" to "Hello! How can I help you?",
+        "hello" to "Hi there! Ask me anything.",
+        "how are you" to "I'm just a bunch of code, but I'm doing great!",
+        "what is your name" to "I'm ChatApp AI Assistant.",
+        "bye" to "Goodbye! Have a nice day.",
+        "thank you" to "You're welcome!",
+        "help" to "Sure! You can ask me about our services or chat."
+    )
 
+    fun sendMessage(userMessage: String) {
         viewModelScope.launch {
-            _uiState.value = ChatUiState.Sending
-            try {
-                repository.sendMessage(text)
-                _uiState.value = ChatUiState.Success
-            } catch (e: Exception) {
-                _uiState.value = ChatUiState.Error(e.message ?: "Failed to send message")
+            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+
+            // Save user message
+            val message = Message(
+                id = UUID.randomUUID().toString(),
+                text = userMessage,
+                senderId = currentUserId,
+                timestamp = System.currentTimeMillis()
+            )
+
+            repository.sendMessage(message)
+
+
+            val lowerMessage = userMessage.lowercase().trim()
+
+            // Check for AI response
+            aiResponses.forEach { (key, reply) ->
+                if (lowerMessage.contains(key)) {
+                    // Save AI reply with senderId = "AI_BOT"
+                    repository.sendMessage(
+                        Message(
+                            id = UUID.randomUUID().toString(),
+                            text = reply,
+                            senderId = "AI_BOT",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                    return@launch
+                }
             }
         }
     }
 
     override fun onCleared() {
-        listenerRegistration?.remove()
         super.onCleared()
+        listenerRegistration?.remove()
     }
-}
-
-sealed class ChatUiState {
-    object Idle : ChatUiState()
-    object Loading : ChatUiState()
-    object Sending : ChatUiState()
-    object Success : ChatUiState()
-    data class Error(val message: String) : ChatUiState()
 }

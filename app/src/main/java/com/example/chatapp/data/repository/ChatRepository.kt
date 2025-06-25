@@ -12,23 +12,28 @@ class ChatRepository {
     private val messagesRef = db.collection("messages")
     private val auth = FirebaseAuth.getInstance()
 
-    suspend fun sendMessage(text: String) {
-        try {
-            val currentUser = auth.currentUser ?: throw Exception("Not authenticated")
-            val messageId = messagesRef.document().id
+//    suspend fun sendMessage(text: String) {
+//        try {
+//            val currentUser = auth.currentUser ?: throw Exception("Not authenticated")
+//            val messageId = messagesRef.document().id
+//
+//            val message = Message(
+//                id = messageId,
+//                text = text,
+//                senderId = currentUser.uid,
+//                timestamp = System.currentTimeMillis()
+//            )
+//
+//            messagesRef.document(messageId).set(message).await()
+//        } catch (e: Exception) {
+//            throw e // Re-throw to be handled by ViewModel
+//        }
+//    }
 
-            val message = Message(
-                id = messageId,
-                text = text,
-                senderId = currentUser.uid,
-                timestamp = System.currentTimeMillis()
-            )
-
-            messagesRef.document(messageId).set(message).await()
-        } catch (e: Exception) {
-            throw e // Re-throw to be handled by ViewModel
-        }
+    suspend fun sendMessage(message: Message) {
+        messagesRef.document(message.id).set(message).await()
     }
+
 
     fun getMessagesQuery(): Query {
         return messagesRef
