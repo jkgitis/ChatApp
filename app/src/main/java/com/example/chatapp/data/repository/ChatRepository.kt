@@ -9,34 +9,21 @@ import kotlinx.coroutines.tasks.await
 class ChatRepository {
 
     private val db = FirebaseFirestore.getInstance()
-    private val messagesRef = db.collection("messages")
     private val auth = FirebaseAuth.getInstance()
 
-//    suspend fun sendMessage(text: String) {
-//        try {
-//            val currentUser = auth.currentUser ?: throw Exception("Not authenticated")
-//            val messageId = messagesRef.document().id
-//
-//            val message = Message(
-//                id = messageId,
-//                text = text,
-//                senderId = currentUser.uid,
-//                timestamp = System.currentTimeMillis()
-//            )
-//
-//            messagesRef.document(messageId).set(message).await()
-//        } catch (e: Exception) {
-//            throw e // Re-throw to be handled by ViewModel
-//        }
-//    }
+    // Reference to user's private messages collection
+    private fun messagesRef() = db
+        .collection("users")
+        .document(auth.currentUser?.uid ?: "unknown_user")
+        .collection("messages")
 
+    // Save message
     suspend fun sendMessage(message: Message) {
-        messagesRef.document(message.id).set(message).await()
+        messagesRef().document(message.id).set(message).await()
     }
 
-
+    // Fetch messages ordered by timestamp
     fun getMessagesQuery(): Query {
-        return messagesRef
-            .orderBy("timestamp", Query.Direction.ASCENDING)
+        return messagesRef().orderBy("timestamp", Query.Direction.ASCENDING)
     }
 }
